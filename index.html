@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand Luxury Tree Final v2 (Tailwind Edition)</title>
+    
+    <!-- Google Fonts -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&display=swap');
+    </style>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'serif': ['Times New Roman', 'serif'],
+                        'cinzel': ['Cinzel', 'serif'],
+                        'handwriting': ['Dancing Script', 'cursive'],
+                    },
+                    colors: {
+                        gold: {
+                            light: '#fceea7',
+                            DEFAULT: '#d4af37',
+                            dim: '#eebb66',
+                        }
+                    },
+                    animation: {
+                        'spin-slow': 'spin 1s linear infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Custom Utilities & Animations -->
+    <style>
+        .ui-hidden {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        
+        /* 保存按钮样式 */
+        .save-btn {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .save-btn::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%);
+            transform-origin: 50% 50%;
+        }
+        
+        .save-btn:focus:not(:active)::after {
+            animation: ripple 1s ease-out;
+        }
+        
+        @keyframes ripple {
+            0% {
+                transform: scale(0, 0);
+                opacity: 0.5;
+            }
+            20% {
+                transform: scale(25, 25);
+                opacity: 0.3;
+            }
+            100% {
+                opacity: 0;
+                transform: scale(40, 40);
+            }
+        }
+        
+        /* 手写花体样式 */
+        .handwritten-title {
+            font-family: 'Dancing Script', cursive;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.8), 
+                         0 0 60px rgba(255, 140, 0, 0.6),
+                         0 0 90px rgba(255, 69, 0, 0.4);
+            background: linear-gradient(45deg, #FFD700 20%, #FFA500 50%, #FF8C00 80%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from {
+                filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.7));
+            }
+            to {
+                filter: drop-shadow(0 0 20px rgba(255, 140, 0, 0.9));
+            }
+        }
+    </style>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm"
+            }
+        }
+    </script>
+</head>
+<body class="m-0 overflow-hidden bg-black font-serif text-white">
+
+    <!-- Loader -->
+    <div id="loader" class="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center transition-opacity duration-[800ms] ease-out">
+        <div class="w-10 h-10 border border-gold/20 border-t-gold rounded-full animate-spin"></div>
+        <div class="text-gold text-sm tracking-[4px] mt-5 uppercase font-light">Loading Holiday Magic</div>
+    </div>
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute top-0 left-0 w-screen h-screen z-0"></div>
+
+    <!-- UI Layer -->
+    <div id="ui-layer" class="absolute top-0 left-0 w-full h-full z-10 pointer-events-none flex flex-col items-center pt-10 box-border">
+        <!-- Title - 改为手写花体 -->
+        <h1 class="handwritten-title text-6xl md:text-7xl font-bold tracking-wide opacity-90 transition-opacity duration-500 text-center px-4">
+            To HSY: Merry Christmas
+        </h1>
+        
+        <!-- Upload Controls -->
+        <div class="upload-wrapper mt-8 pointer-events-auto text-center transition-opacity duration-500 flex flex-col items-center gap-4">
+            <div class="flex gap-4">
+                <label class="inline-flex items-center px-7 py-3 bg-gradient-to-r from-red-900/60 to-red-700/40 border-2 border-red-400/50 text-red-200 
+                          cursor-pointer uppercase tracking-[3px] text-xs backdrop-blur-sm rounded-lg
+                          transition-all duration-300 hover:bg-gradient-to-r hover:from-red-600 hover:to-red-500 hover:text-white hover:border-red-300
+                          hover:shadow-[0_0_25px_rgba(239,68,68,0.6)] save-btn hover:scale-105">
+                    <i class="fas fa-images mr-2"></i>
+                    Add Memories
+                    <input type="file" id="file-input" multiple accept="image/*" class="hidden">
+                </label>
+                
+                <button id="save-html-btn" class="inline-flex items-center px-7 py-3 bg-gradient-to-r from-blue-900/60 to-blue-700/40 border-2 border-blue-400/50 text-blue-200 
+                          cursor-pointer uppercase tracking-[3px] text-xs backdrop-blur-sm rounded-lg
+                          transition-all duration-300 hover:bg-gradient-to-r hover:from-blue-600 hover:to-blue-500 hover:text-white hover:border-blue-300
+                          hover:shadow-[0_0_25px_rgba(59,130,246,0.6)] save-btn hover:scale-105">
+                    <i class="fas fa-download mr-2"></i>
+                    Save as HTML
+                </button>
+            </div>
+            <div class="text-gold/70 text-xs mt-3 tracking-widest uppercase font-light">
+                <span class="inline-flex items-center"><i class="fas fa-keyboard mr-2"></i>Press 'H' to Hide Controls</span>
+                <span class="mx-3">•</span>
+                <span class="inline-flex items-center"><i class="fas fa-save mr-2"></i>Press 'S' to Save</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Webcam hidden structure -->
+    <div id="webcam-wrapper" class="absolute bottom-10 right-10 w-[120px] h-[90px] border border-white/10 overflow-hidden opacity-0 pointer-events-none">
+        <video id="webcam" autoplay playsinline style="display:none;"></video>
+        <canvas id="webcam-preview"></canvas>
+    </div>
+
+    <!-- 保存状态提示 -->
+    <div id="save-status" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-green-900/90 to-emerald-800/90 backdrop-blur-md 
+                                text-white px-6 py-3 rounded-xl text-sm border-2 border-emerald-400/40 
+                                opacity-0 transition-all duration-300 pointer-events-none z-50 shadow-xl">
+        <i class="fas fa-spinner fa-spin mr-2"></i>
+        <span>Saving HTML file...</span>
+    </div>
+
+    <!-- 图片数据存储区域（用于保存时嵌入） -->
+    <div id="image-data-storage" style="display: none;"></div>
+
+    <script>
+        // 全局变量，用于保存图片数据
+        window.uploadedImagesData = [];
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'; 
+        import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+
+        // --- CONFIGURATION ---
+        const CONFIG = {
+            colors: {
+                bg: 0x000000, 
+                champagneGold: 0xffd966, 
+                deepGreen: 0x03180a,     
+                accentRed: 0x990000,     
+            },
+            particles: {
+                count: 1500,     
+                dustCount: 2500, 
+                treeHeight: 24,  
+                treeRadius: 8    
+            },
+            camera: {
+                z: 50 
+            },
+            spiralParticleCount: 1200, 
+            spiralHeight: 28,
+            spiralRadius: 12,
+            spiralTurns: 5,
+            snow: {
+                count: 3500,        
+                speed: 1.5,         
+                spreadRadius: 60,   
+                topY: 60,           
+                bottomY: -50        
+            }
+        };
+
+        const STATE = {
+            mode: 'TREE', 
+            focusIndex: -1, 
+            focusTarget: null,
+            hand: { detected: false, x: 0, y: 0 },
+            rotation: { x: 0, y: 0 }
+            // 注意：uploadedImages 不再存储在 STATE 中，而是存储在 window.uploadedImagesData
+        };
+
+        let scene, camera, renderer, composer;
+        let mainGroup; 
+        let clock = new THREE.Clock();
+        let particleSystem = []; 
+        let photoMeshGroup = new THREE.Group();
+        let handLandmarker, video, webcamCanvas, webcamCtx;
+        let caneTexture; 
+        let spiralSystem, spiralGeo, spiralMat;
+        let spiralMix = 0; 
+        let snowSystem = [];
+        let snowGroup;
+
+        async function init() {
+            initThree();
+            setupEnvironment(); 
+            setupLights();
+            createTextures();
+            createParticles(); 
+            createDust();
+            createSpiralParticles(); 
+            createSnowfall();
+            setupPostProcessing();
+            setupEvents();
+            
+            // 初始化保存的图片（如果存在）
+            await initSavedImages();
+            
+            await initMediaPipe();
+            
+            const loader = document.getElementById('loader');
+            loader.style.opacity = 0;
+            setTimeout(() => loader.remove(), 800);
+
+            animate();
+        }
+
+        // 初始化已保存的图片
+        async function initSavedImages() {
+            if (window.uploadedImagesData && window.uploadedImagesData.length > 0) {
+                for (const imageData of window.uploadedImagesData) {
+                    try {
+                        await loadAndAddImage(imageData.data, imageData);
+                    } catch (error) {
+                        console.warn('Failed to load saved image:', error);
+                    }
+                }
+                showSaveStatus(`Loaded ${window.uploadedImagesData.length} saved images`);
+            }
+        }
+
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(CONFIG.colors.bg);
+            scene.fog = new THREE.FogExp2(CONFIG.colors.bg, 0.01); 
+
+            camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, CONFIG.camera.z); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ReinhardToneMapping; 
+            renderer.toneMappingExposure = 2.2; 
+            container.appendChild(renderer.domElement);
+
+            mainGroup = new THREE.Group();
+            scene.add(mainGroup);
+        }
+
+        function setupEnvironment() {
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+        }
+
+        function setupLights() {
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambient);
+
+            const innerLight = new THREE.PointLight(0xffaa00, 2, 20);
+            innerLight.position.set(0, 5, 0);
+            mainGroup.add(innerLight);
+
+            const spotGold = new THREE.SpotLight(0xffcc66, 1200);
+            spotGold.position.set(30, 40, 40);
+            spotGold.angle = 0.5;
+            spotGold.penumbra = 0.5;
+            scene.add(spotGold);
+
+            const spotBlue = new THREE.SpotLight(0x6688ff, 600);
+            spotBlue.position.set(-30, 20, -30);
+            scene.add(spotBlue);
+            
+            const fill = new THREE.DirectionalLight(0xffeebb, 0.8);
+            fill.position.set(0, 0, 50);
+            scene.add(fill);
+        }
+
+        function setupPostProcessing() {
+            const renderScene = new RenderPass(scene, camera);
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+            bloomPass.threshold = 0.7; 
+            bloomPass.strength = 0.45; 
+            bloomPass.radius = 0.4;
+
+            composer = new EffectComposer(renderer);
+            composer.addPass(renderScene);
+            composer.addPass(bloomPass);
+        }
+
+        function createTextures() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0,0,128,128);
+            ctx.fillStyle = '#880000'; 
+            ctx.beginPath();
+            for(let i=-128; i<256; i+=32) {
+                ctx.moveTo(i, 0); ctx.lineTo(i+32, 128); ctx.lineTo(i+16, 128); ctx.lineTo(i-16, 0);
+            }
+            ctx.fill();
+            caneTexture = new THREE.CanvasTexture(canvas);
+            caneTexture.wrapS = THREE.RepeatWrapping;
+            caneTexture.wrapT = THREE.RepeatWrapping;
+            caneTexture.repeat.set(3, 3);
+        }
+
+        function createSnowTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32; canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            
+            const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+            grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 32, 32);
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createSnowfall() {
+            snowGroup = new THREE.Group();
+            const texture = createSnowTexture();
+            
+            const geometry = new THREE.PlaneGeometry(0.4, 0.4);
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture, 
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.9,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+
+            for (let i = 0; i < CONFIG.snow.count; i++) {
+                const mesh = new THREE.Mesh(geometry, material);
+                
+                mesh.position.set(
+                    (Math.random() - 0.5) * CONFIG.snow.spreadRadius * 2,
+                    Math.random() * (CONFIG.snow.topY - CONFIG.snow.bottomY) + CONFIG.snow.bottomY,
+                    (Math.random() - 0.5) * CONFIG.snow.spreadRadius * 2
+                );
+
+                mesh.rotation.set(
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI
+                );
+
+                const data = {
+                    mesh: mesh,
+                    speed: CONFIG.snow.speed * (0.6 + Math.random() * 0.8),
+                    rotationSpeed: {
+                        x: (Math.random() - 0.5) * 1.0,
+                        y: (Math.random() - 0.5) * 1.0,
+                        z: (Math.random() - 0.5) * 1.0
+                    },
+                    swayOffset: Math.random() * 100,
+                    swaySpeed: 0.5 + Math.random() * 1.0
+                };
+
+                snowSystem.push(data);
+                snowGroup.add(mesh);
+            }
+            mainGroup.add(snowGroup);
+        }
+
+        function updateSnowfall(dt) {
+            const time = clock.getElapsedTime();
+
+            snowSystem.forEach(item => {
+                item.mesh.position.y -= item.speed * dt;
+
+                item.mesh.position.x += Math.sin(time * item.swaySpeed + item.swayOffset) * 1.5 * dt;
+                item.mesh.position.z += Math.cos(time * (item.swaySpeed * 0.8) + item.swayOffset) * 1.5 * dt;
+
+                item.mesh.rotation.x += item.rotationSpeed.x * dt;
+                item.mesh.rotation.y += item.rotationSpeed.y * dt;
+                item.mesh.rotation.z += item.rotationSpeed.z * dt;
+
+                if (item.mesh.position.y < CONFIG.snow.bottomY) {
+                    item.mesh.position.y = CONFIG.snow.topY;
+                    item.mesh.position.x = (Math.random() - 0.5) * CONFIG.snow.spreadRadius * 2;
+                    item.mesh.position.z = (Math.random() - 0.5) * CONFIG.snow.spreadRadius * 2;
+                }
+            });
+        }
+
+        function createSpiralParticles() {
+            const particleCount = CONFIG.spiralParticleCount;
+            const positions = [];
+            const velocities = []; 
+            const spiralData = []; 
+
+            for(let i = 0; i < particleCount; i++) {
+                const progress = i / particleCount;
+                const y = (progress * CONFIG.spiralHeight) - (CONFIG.spiralHeight / 2);
+                
+                positions.push(0, y, 0);
+                
+                spiralData.push({ 
+                    y: y, 
+                    randomAngleOffset: (Math.random() - 0.5) * 0.2, 
+                    speed: 1 + Math.random() * 2,
+                    scatterPos: new THREE.Vector3(
+                        (Math.random() - 0.5) * 60, 
+                        (Math.random() - 0.5) * 60, 
+                        (Math.random() - 0.5) * 60
+                    )
+                }); 
+            }
+
+            spiralGeo = new THREE.BufferGeometry();
+            spiralGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            spiralGeo.userData = { velocities, spiralData };
+
+            spiralMat = new THREE.PointsMaterial({
+                color: 0xFFD700,
+                size: 0.5,
+                transparent: true,
+                opacity: 0.9,
+                blending: THREE.AdditiveBlending,
+                sizeAttenuation: true
+            });
+
+            spiralSystem = new THREE.Points(spiralGeo, spiralMat);
+            scene.add(spiralSystem);
+        }
+
+        function updateSpiralParticles(dt) {
+            if(!spiralSystem) return;
+
+            const positions = spiralGeo.attributes.position.array;
+            const spiralData = spiralGeo.userData.spiralData;
+            
+            const targetMix = (STATE.mode !== 'TREE') ? 1.0 : 0.0;
+            
+            spiralMix += (targetMix - spiralMix) * 3.0 * dt;
+
+            spiralSystem.rotation.y += 0.0005;
+
+            const time = clock.getElapsedTime();
+            const h = CONFIG.spiralHeight;
+            const halfH = h / 2;
+
+            for(let i = 0; i < positions.length; i += 3) {
+                const index = i / 3;
+                const data = spiralData[index];
+
+                const fallDistance = time * data.speed;
+                let flowY = data.y - fallDistance;
+                
+                let currentY = flowY % h;
+                if (currentY < -halfH) currentY += h;
+                if (currentY > halfH) currentY -= h;
+
+                let normalizedH = (currentY + halfH) / h; 
+                
+                const taperFactor = Math.max(0.1, 1.0 - normalizedH); 
+                const currentRadius = taperFactor * CONFIG.spiralRadius;
+                
+                const spiralAngle = normalizedH * Math.PI * 2 * CONFIG.spiralTurns;
+                const finalAngle = spiralAngle + data.randomAngleOffset;
+
+                const spiralX = Math.cos(finalAngle) * currentRadius;
+                const spiralY = currentY;
+                const spiralZ = Math.sin(finalAngle) * currentRadius;
+
+                const p1x = spiralX;
+                const p1y = spiralY;
+                const p1z = spiralZ;
+
+                const p2x = data.scatterPos.x;
+                const p2y = data.scatterPos.y;
+                const p2z = data.scatterPos.z;
+
+                positions[i]   = p1x + (p2x - p1x) * spiralMix;
+                positions[i+1] = p1y + (p2y - p1y) * spiralMix;
+                positions[i+2] = p1z + (p2z - p1z) * spiralMix;
+            }
+
+            spiralGeo.attributes.position.needsUpdate = true;
+        }
+
+        class Particle {
+            constructor(mesh, type, isDust = false) {
+                this.mesh = mesh;
+                this.type = type;
+                this.isDust = isDust;
+                
+                this.posTree = new THREE.Vector3();
+                this.posScatter = new THREE.Vector3();
+                this.baseScale = mesh.scale.x; 
+
+                const speedMult = (type === 'PHOTO') ? 0.3 : 2.0;
+
+                this.spinSpeed = new THREE.Vector3(
+                    (Math.random() - 0.5) * speedMult,
+                    (Math.random() - 0.5) * speedMult,
+                    (Math.random() - 0.5) * speedMult
+                );
+
+                this.calculatePositions();
+            }
+
+            calculatePositions() {
+                const h = CONFIG.particles.treeHeight;
+                const halfH = h / 2;
+                let t = Math.random(); 
+                t = Math.pow(t, 0.8); 
+                const y = (t * h) - halfH;
+                let rMax = CONFIG.particles.treeRadius * (1.0 - t); 
+                if (rMax < 0.5) rMax = 0.5;
+                const angle = t * 50 * Math.PI + Math.random() * Math.PI; 
+                const r = rMax * (0.8 + Math.random() * 0.4); 
+                this.posTree.set(Math.cos(angle) * r, y, Math.sin(angle) * r);
+
+                let rScatter = this.isDust ? (12 + Math.random()*20) : (8 + Math.random()*12);
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                this.posScatter.set(
+                    rScatter * Math.sin(phi) * Math.cos(theta),
+                    rScatter * Math.sin(phi) * Math.sin(theta),
+                    rScatter * Math.cos(phi)
+                );
+            }
+
+            update(dt, mode, focusTargetMesh) {
+                let target = this.posTree;
+                
+                if (mode === 'SCATTER') target = this.posScatter;
+                else if (mode === 'FOCUS') {
+                    if (this.mesh === focusTargetMesh) {
+                        const desiredWorldPos = new THREE.Vector3(0, 2, 35);
+                        const invMatrix = new THREE.Matrix4().copy(mainGroup.matrixWorld).invert();
+                        target = desiredWorldPos.applyMatrix4(invMatrix);
+                    } else {
+                        target = this.posScatter;
+                    }
+                }
+
+                const lerpSpeed = (mode === 'FOCUS' && this.mesh === focusTargetMesh) ? 5.0 : 2.0; 
+                this.mesh.position.lerp(target, lerpSpeed * dt);
+
+                if (mode === 'SCATTER') {
+                    this.mesh.rotation.x += this.spinSpeed.x * dt;
+                    this.mesh.rotation.y += this.spinSpeed.y * dt;
+                    this.mesh.rotation.z += this.spinSpeed.z * dt; 
+                } else if (mode === 'TREE') {
+                    this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, 0, dt);
+                    this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, 0, dt);
+                    this.mesh.rotation.y += 0.5 * dt; 
+                }
+                
+                if (mode === 'FOCUS' && this.mesh === focusTargetMesh) {
+                    this.mesh.lookAt(camera.position); 
+                }
+
+                let s = this.baseScale;
+                if (this.isDust) {
+                    s = this.baseScale * (0.8 + 0.4 * Math.sin(clock.elapsedTime * 4 + this.mesh.id));
+                    if (mode === 'TREE') s = 0; 
+                } else if (mode === 'SCATTER' && this.type === 'PHOTO') {
+                    s = this.baseScale * 2.5; 
+                } else if (mode === 'FOCUS') {
+                    if (this.mesh === focusTargetMesh) s = 4.5; 
+                    else s = this.baseScale * 0.8; 
+                }
+                
+                this.mesh.scale.lerp(new THREE.Vector3(s,s,s), 4*dt);
+            }
+        }
+
+        function createParticles() {
+            const sphereGeo = new THREE.SphereGeometry(0.5, 32, 32); 
+            const boxGeo = new THREE.BoxGeometry(0.55, 0.55, 0.55); 
+            const smallStarGeo = new THREE.OctahedronGeometry(0.45, 0); 
+            
+            const curve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0, -0.5, 0), new THREE.Vector3(0, 0.3, 0),
+                new THREE.Vector3(0.1, 0.5, 0), new THREE.Vector3(0.3, 0.4, 0)
+            ]);
+            const candyGeo = new THREE.TubeGeometry(curve, 16, 0.08, 8, false);
+
+            const goldMat = new THREE.MeshStandardMaterial({
+                color: CONFIG.colors.champagneGold,
+                metalness: 1.0, roughness: 0.1,
+                envMapIntensity: 2.0, 
+                emissive: 0x443300,   
+                emissiveIntensity: 0.3
+            });
+
+            const greenMat = new THREE.MeshStandardMaterial({
+                color: CONFIG.colors.deepGreen,
+                metalness: 0.2, roughness: 0.8,
+                emissive: 0x002200,
+                emissiveIntensity: 0.2 
+            });
+
+            const redMat = new THREE.MeshPhysicalMaterial({
+                color: CONFIG.colors.accentRed,
+                metalness: 0.3, roughness: 0.2, clearcoat: 1.0,
+                emissive: 0x330000
+            });
+            
+            const candyMat = new THREE.MeshStandardMaterial({ map: caneTexture, roughness: 0.4 });
+
+            for (let i = 0; i < CONFIG.particles.count; i++) {
+                const rand = Math.random();
+                let mesh, type;
+                
+                if (rand < 0.40) {
+                    mesh = new THREE.Mesh(boxGeo, greenMat);
+                    type = 'BOX';
+                } else if (rand < 0.70) {
+                    mesh = new THREE.Mesh(smallStarGeo, goldMat);
+                    type = 'GOLD_STAR';
+                } else if (rand < 0.92) {
+                    mesh = new THREE.Mesh(sphereGeo, goldMat);
+                    type = 'GOLD_SPHERE';
+                } else if (rand < 0.97) {
+                    mesh = new THREE.Mesh(sphereGeo, redMat);
+                    type = 'RED';
+                } else {
+                    mesh = new THREE.Mesh(candyGeo, candyMat);
+                    type = 'CANE';
+                }
+
+                const s = 0.4 + Math.random() * 0.5;
+                mesh.scale.set(s,s,s);
+                mesh.rotation.set(Math.random()*6, Math.random()*6, Math.random()*6);
+                
+                mainGroup.add(mesh);
+                particleSystem.push(new Particle(mesh, type, false));
+            }
+
+            const starGeo = new THREE.OctahedronGeometry(1.2, 0);
+            const starMat = new THREE.MeshStandardMaterial({
+                color: 0xffdd88, emissive: 0xffaa00, emissiveIntensity: 1.0,
+                metalness: 1.0, roughness: 0
+            });
+            const star = new THREE.Mesh(starGeo, starMat);
+            star.position.set(0, CONFIG.particles.treeHeight/2 + 1.2, 0);
+            mainGroup.add(star);
+            
+            mainGroup.add(photoMeshGroup);
+        }
+
+        function createDust() {
+            const geo = new THREE.TetrahedronGeometry(0.08, 0);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.8 });
+            
+            for(let i=0; i<CONFIG.particles.dustCount; i++) {
+                 const mesh = new THREE.Mesh(geo, mat);
+                 mesh.scale.setScalar(0.5 + Math.random());
+                 mainGroup.add(mesh);
+                 particleSystem.push(new Particle(mesh, 'DUST', true));
+            }
+        }
+
+        // 加载并添加图片的辅助函数
+        function loadAndAddImage(dataUrl, imageData = null) {
+            return new Promise((resolve, reject) => {
+                const textureLoader = new THREE.TextureLoader();
+                textureLoader.load(
+                    dataUrl,
+                    (texture) => {
+                        texture.colorSpace = THREE.SRGBColorSpace;
+                        addPhotoToScene(texture, imageData);
+                        resolve();
+                    },
+                    undefined,
+                    (error) => {
+                        console.error('Error loading image:', error);
+                        reject(error);
+                    }
+                );
+            });
+        }
+
+        function addPhotoToScene(texture, imageData = null) {
+            const img = texture.image;
+            let width = 1.2;
+            let height = 1.2;
+            const baseSize = 1.2;
+
+            if (img.width && img.height) {
+                if (img.width > img.height) {
+                    width = baseSize;
+                    height = baseSize * (img.height / img.width);
+                } else {
+                    height = baseSize;
+                    width = baseSize * (img.width / img.height);
+                }
+            }
+
+            // 保存图片数据到全局变量
+            if (imageData) {
+                if (!window.uploadedImagesData.some(img => img.data === imageData.data)) {
+                    window.uploadedImagesData.push(imageData);
+                }
+            }
+
+            const frameGeo = new THREE.BoxGeometry(width + 0.2, height + 0.2, 0.05);
+            const frameMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.champagneGold, metalness: 1.0, roughness: 0.1 });
+            const frame = new THREE.Mesh(frameGeo, frameMat);
+
+            const photoGeo = new THREE.PlaneGeometry(width, height);
+            
+            const photoMat = new THREE.MeshBasicMaterial({ 
+                map: texture,
+                side: THREE.DoubleSide,
+                color: 0x888888,
+                transparent: false
+            });
+            
+            const photo = new THREE.Mesh(photoGeo, photoMat);
+            photo.position.z = 0.04;
+
+            const group = new THREE.Group();
+            group.add(frame);
+            group.add(photo);
+            
+            const s = 0.8;
+            group.scale.set(s,s,s);
+            
+            photoMeshGroup.add(group);
+            particleSystem.push(new Particle(group, 'PHOTO', false));
+            
+            // 显示保存提示
+            showSaveStatus('Photo added to tree! Press S to save with photos embedded.');
+        }
+        
+        function handleImageUpload(e) {
+            const files = e.target.files;
+            if(!files.length) return;
+            
+            Array.from(files).forEach(f => {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    // 保存原始图片数据
+                    const imageData = {
+                        name: f.name,
+                        type: f.type,
+                        data: ev.target.result,
+                        date: new Date().toISOString()
+                    };
+                    
+                    // 加载纹理并添加到场景
+                    loadAndAddImage(ev.target.result, imageData);
+                }
+                reader.readAsDataURL(f);
+            });
+        }
+
+        // 保存HTML文件
+        function saveAsHTML() {
+            const status = document.getElementById('save-status');
+            status.textContent = 'Generating HTML file...';
+            status.style.opacity = '1';
+            
+            // 克隆当前文档
+            const docClone = document.implementation.createHTMLDocument();
+            docClone.documentElement.innerHTML = document.documentElement.innerHTML;
+            
+            // 准备图片数据
+            const imagesData = window.uploadedImagesData || [];
+            
+            // 创建一个隐藏的div来存储图片数据
+            const imageStorageDiv = docClone.createElement('div');
+            imageStorageDiv.id = 'image-data-storage';
+            imageStorageDiv.style.display = 'none';
+            imageStorageDiv.dataset.images = JSON.stringify(imagesData);
+            docClone.body.appendChild(imageStorageDiv);
+            
+            // 添加初始化图片的脚本
+            const initScript = docClone.createElement('script');
+            initScript.textContent = `
+                // 初始化图片数据
+                window.uploadedImagesData = [];
+                
+                // 从隐藏div加载图片数据
+                document.addEventListener('DOMContentLoaded', function() {
+                    const imageStorage = document.getElementById('image-data-storage');
+                    if (imageStorage && imageStorage.dataset.images) {
+                        try {
+                            window.uploadedImagesData = JSON.parse(imageStorage.dataset.images);
+                            console.log('Loaded', window.uploadedImagesData.length, 'saved images');
+                        } catch (e) {
+                            console.error('Error loading saved images:', e);
+                        }
+                    }
+                    
+                    // 修改init函数以加载保存的图片
+                    const originalInit = window.init;
+                    if (originalInit) {
+                        window.init = async function() {
+                            await originalInit();
+                            // 图片会在initSavedImages函数中自动加载
+                        };
+                    }
+                });
+            `;
+            docClone.body.appendChild(initScript);
+            
+            // 创建下载
+            const htmlContent = '<!DOCTYPE html>\n' + docClone.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+            a.href = url;
+            a.download = `Christmas-Tree-With-Photos-${dateStr}.html`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // 更新状态
+            status.innerHTML = '<i class="fas fa-check-circle mr-2"></i><span>HTML file saved successfully!</span>';
+            setTimeout(() => {
+                status.style.opacity = '0';
+            }, 3000);
+        }
+
+        function showSaveStatus(message) {
+            const status = document.getElementById('save-status');
+            status.innerHTML = `<i class="fas fa-info-circle mr-2"></i><span>${message}</span>`;
+            status.style.opacity = '1';
+            setTimeout(() => {
+                status.style.opacity = '0';
+            }, 3000);
+        }
+
+        // --- MEDIAPIPE ---
+        async function initMediaPipe() {
+            video = document.getElementById('webcam');
+            webcamCanvas = document.getElementById('webcam-preview');
+            webcamCtx = webcamCanvas.getContext('2d');
+            webcamCanvas.width = 160; webcamCanvas.height = 120;
+
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+            );
+            handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                    delegate: "GPU"
+                },
+                runningMode: "VIDEO",
+                numHands: 1
+            });
+            
+            if (navigator.mediaDevices?.getUserMedia) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = stream;
+                    video.addEventListener("loadeddata", predictWebcam);
+                } catch (err) {
+                    console.warn('Webcam not available:', err);
+                }
+            }
+        }
+
+        let lastVideoTime = -1;
+        async function predictWebcam() {
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                if (handLandmarker) {
+                    const result = handLandmarker.detectForVideo(video, performance.now());
+                    processGestures(result);
+                }
+            }
+            requestAnimationFrame(predictWebcam);
+        }
+
+        function processGestures(result) {
+            if (result.landmarks && result.landmarks.length > 0) {
+                STATE.hand.detected = true;
+                const lm = result.landmarks[0];
+                STATE.hand.x = (lm[9].x - 0.5) * 2; 
+                STATE.hand.y = (lm[9].y - 0.5) * 2;
+
+                const thumb = lm[4]; const index = lm[8]; const wrist = lm[0];
+                const pinchDist = Math.hypot(thumb.x - index.x, thumb.y - index.y);
+                const tips = [lm[8], lm[12], lm[16], lm[20]];
+                let avgDist = 0;
+                tips.forEach(t => avgDist += Math.hypot(t.x - wrist.x, t.y - wrist.y));
+                avgDist /= 4;
+
+                if (pinchDist < 0.05) {
+                    if (STATE.mode !== 'FOCUS') {
+                        STATE.mode = 'FOCUS';
+                        const photos = particleSystem.filter(p => p.type === 'PHOTO');
+                        if (photos.length) STATE.focusTarget = photos[Math.floor(Math.random()*photos.length)].mesh;
+                    }
+                } else if (avgDist < 0.25) {
+                    STATE.mode = 'TREE';
+                    STATE.focusTarget = null;
+                } else if (avgDist > 0.4) {
+                    STATE.mode = 'SCATTER';
+                    STATE.focusTarget = null;
+                }
+            } else {
+                STATE.hand.detected = false;
+            }
+        }
+
+        function setupEvents() {
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                composer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            const fileInput = document.getElementById('file-input');
+            if (fileInput) {
+                fileInput.addEventListener('change', handleImageUpload);
+            }
+            
+            const saveBtn = document.getElementById('save-html-btn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', saveAsHTML);
+            }
+            
+            // 键盘快捷键
+            window.addEventListener('keydown', (e) => {
+                const key = e.key.toLowerCase();
+                if (key === 'h') {
+                    const controls = document.querySelector('.upload-wrapper');
+                    if (controls) controls.classList.toggle('ui-hidden');
+                } else if (key === 's' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    saveAsHTML();
+                } else if (key === 's') {
+                    saveAsHTML();
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+
+            if (STATE.mode === 'SCATTER' && STATE.hand.detected) {
+                const targetRotY = STATE.hand.x * Math.PI * 0.9; 
+                const targetRotX = STATE.hand.y * Math.PI * 0.25;
+                STATE.rotation.y += (targetRotY - STATE.rotation.y) * 3.0 * dt;
+                STATE.rotation.x += (targetRotX - STATE.rotation.x) * 3.0 * dt;
+            } else {
+                if(STATE.mode === 'TREE') {
+                    STATE.rotation.y += 0.3 * dt;
+                    STATE.rotation.x += (0 - STATE.rotation.x) * 2.0 * dt;
+                } else {
+                     STATE.rotation.y += 0.1 * dt; 
+                }
+            }
+
+            mainGroup.rotation.y = STATE.rotation.y;
+            mainGroup.rotation.x = STATE.rotation.x;
+
+            updateSpiralParticles(dt);
+            updateSnowfall(dt);
+
+            particleSystem.forEach(p => p.update(dt, STATE.mode, STATE.focusTarget));
+            composer.render();
+        }
+
+        // 将init函数暴露到全局，以便保存的HTML可以调用
+        window.init = init;
+        
+        // 开始初始化
+        init();
+    </script>
+    
+    <!-- Font Awesome 图标 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+</body>
+</html>
